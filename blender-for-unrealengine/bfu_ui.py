@@ -1026,8 +1026,8 @@ class BFU_PT_BlenderForUnrealObject(bpy.types.Panel):
             obj.computedStaticMeshLightMapRes = GetExportRealSurfaceArea(obj)
             self.report(
                 {'INFO'},
-                "Light map area updated to " + str(round(obj.computedStaticMeshLightMapRes)) + ". " +
-                "Compunted Light map: " + str(GetCompuntedLightMap(obj)))
+                f"Light map area updated to {str(round(obj.computedStaticMeshLightMapRes))}. Compunted Light map: {str(GetCompuntedLightMap(obj))}",
+            )
             return {'FINISHED'}
 
 
@@ -1060,12 +1060,8 @@ class BFU_PT_BlenderForUnrealObject(bpy.types.Panel):
                         )
                     layout.prop(item, "use", text="")
                 else:
-                    dataText = (
-                        'Action data named "' + item.name +
-                        '" Not Found. Please clic on update'
-                        )
+                    dataText = f'Action data named "{item.name}" Not Found. Please clic on update'
                     layout.label(text=dataText, icon="ERROR")
-            # Not optimised for 'GRID' layout type.
             elif self.layout_type in {'GRID'}:
                 layout.alignment = 'CENTER'
                 layout.label(text="", icon_value=icon)
@@ -1130,16 +1126,14 @@ class BFU_PT_BlenderForUnrealObject(bpy.types.Panel):
                 col = self.layout.column()
 
                 def addAnimRow(
-                        action_name,
-                        action_type,
-                        frame_start,
-                        frame_end):
+                                action_name,
+                                action_type,
+                                frame_start,
+                                frame_end):
                     row = col.row()
                     row.label(
-                        text="- ["+action_name +
-                        "] Frame "+frame_start+" to "+frame_end +
-                        " ("+action_type+")"
-                        )
+                        text=f"- [{action_name}] Frame {frame_start} to {frame_end} ({action_type})"
+                    )
 
                 for action in animation_to_export:
                     Frames = GetDesiredActionStartEndTime(obj, action)
@@ -1338,8 +1332,7 @@ class BFU_PT_BlenderForUnrealObject(bpy.types.Panel):
             collections = GetCollectionToExport(scene)
             popup_title = "Collection list"
             if len(collections) > 0:
-                popup_title = (
-                    str(len(collections))+' collection(s) to export found.')
+                popup_title = f'{len(collections)} collection(s) to export found.'
             else:
                 popup_title = 'No collection to export found.'
 
@@ -1347,7 +1340,8 @@ class BFU_PT_BlenderForUnrealObject(bpy.types.Panel):
                 col = self.layout.column()
                 for collection in collections:
                     row = col.row()
-                    row.label(text="- "+collection.name)
+                    row.label(text=f"- {collection.name}")
+
             bpy.context.window_manager.popup_menu(
                 draw,
                 title=popup_title,

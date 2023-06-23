@@ -66,9 +66,7 @@ class VertexColorExportData:
 
     def GetPropertyOwner(self):
         # Return the object to use for the property or return self if none
-        if self.parent:
-            return self.parent
-        return self.obj
+        return self.parent if self.parent else self.obj
 
     def GetChosenVertexIndex(self):
 
@@ -104,8 +102,7 @@ class VertexColorExportData:
         if index == -1:
             return "None"
 
-        obj = self.obj
-        if obj:
+        if obj := self.obj:
             if obj.type == "MESH":
                 if obj.data:
                     vertex_colors = utils.getVertexColors(obj)

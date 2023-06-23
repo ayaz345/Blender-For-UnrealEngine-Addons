@@ -45,8 +45,7 @@ def JsonLoadFile(json_file_path):
 
 def GetUnrealVersion():
     version = unreal.SystemLibrary.get_engine_version().split(".")
-    float_version = int(version[0]) + float(float(version[1])/100)
-    return float_version
+    return int(version[0]) + float(float(version[1])/100)
 
 
 def ImportAllAssets():

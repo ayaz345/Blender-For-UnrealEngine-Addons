@@ -71,8 +71,8 @@ def ProcessCameraExport(obj):
         file.path = dirpath
         file.type = "FBX"
 
-    if obj.ExportAsLod is False:
-        if (scene.text_AdditionalData and addon_prefs.useGeneratedScripts):
+    if (scene.text_AdditionalData and addon_prefs.useGeneratedScripts):
+        if obj.ExportAsLod is False:
             ExportSingleAdditionalTrackCamera(
                 dirpath,
                 GetObjExportFileName(obj, "_AdditionalTrack.json"),

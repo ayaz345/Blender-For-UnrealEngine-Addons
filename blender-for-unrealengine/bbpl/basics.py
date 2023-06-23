@@ -53,10 +53,7 @@ def ExitTweakmode():
 
 
 def is_deleted(o):
-    if o and o is not None:
-        return not (o.name in bpy.data.objects)
-    else:
-        return True
+    return o.name not in bpy.data.objects if o and o is not None else True
 
 
 def CheckPluginIsActivated(PluginName):
@@ -115,7 +112,7 @@ def SetCurrentSelection(selection):
     # Get array select object and the active
 
     bpy.ops.object.select_all(action='DESELECT')
-    for x, obj in enumerate(selection.selected_objects):
+    for obj in selection.selected_objects:
         if not is_deleted(obj):
             if obj.name in bpy.context.window.view_layer.objects:
                 obj.select_set(True)
@@ -174,10 +171,7 @@ def nearestPowerOfTwo(value):
     a = previousPowerOfTwo(value)
     b = nextPowerOfTwo(value)
 
-    if value - a < b - value:
-        return a
-    else:
-        return b
+    return a if value - a < b - value else b
 
 
 def RemoveFolderTree(folder):
@@ -201,9 +195,7 @@ def GetChilds(obj):
 
 
 def getRootBoneParent(bone):
-    if bone.parent is not None:
-        return getRootBoneParent(bone.parent)
-    return bone
+    return getRootBoneParent(bone.parent) if bone.parent is not None else bone
 
 
 def getFirstDeformBoneParent(bone):
@@ -267,7 +259,7 @@ def ValidFilename(filename):
     # Normalizes string, removes non-alpha characters
     # File name use
 
-    valid_chars = "-_.() %s%s" % (string.ascii_letters, string.digits)
+    valid_chars = f"-_.() {string.ascii_letters}{string.digits}"
     filename = ''.join(c for c in filename if c in valid_chars)
     return filename
 
@@ -276,7 +268,7 @@ def ValidDefname(filename):
     # Normalizes string, removes non-alpha characters
     # Def name use
 
-    valid_chars = "_%s%s" % (string.ascii_letters, string.digits)
+    valid_chars = f"_{string.ascii_letters}{string.digits}"
     filename = ''.join(c for c in filename if c in valid_chars)
     return filename
 

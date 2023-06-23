@@ -113,7 +113,7 @@ class TimelineMarkerSequence():
             marker_list.append(marker)
 
         order_marker_list = []
-        while len(marker_list) != 0:
+        while marker_list:
             first_marker = GetFisrtMarket(marker_list)
             order_marker_list.append(first_marker)
             marker_list.remove(first_marker)
@@ -123,7 +123,7 @@ class TimelineMarkerSequence():
         for marker in order_marker_list:
             marker_sequence = MarkerSequence(marker)
 
-            if len(marker_sequences) > 0:
+            if marker_sequences:
                 previous_marker_sequence = marker_sequences[-1]
                 previous_marker_sequence.end = marker.frame - 1
 
@@ -163,28 +163,28 @@ def UpdateProgress(job_title, progress, time=None):
 
     if progress >= 1:
         if time is not None:
-            msg += " DONE IN " + str(round(time, 2)) + "s\r\n"
+            msg += f" DONE IN {str(round(time, 2))}" + "s\r\n"
         else:
             msg += " DONE\r\n"
 
 
 def RemoveUselessSpecificData(name, type):
-    if type == "MESH":
-        if name in bpy.data.meshes:
-            oldData = bpy.data.meshes[name]
-            if oldData.users == 0:
-                bpy.data.meshes.remove(oldData)
-
     if type == "ARMATURE":
         if name in bpy.data.armatures:
             oldData = bpy.data.armatures[name]
             if oldData.users == 0:
                 bpy.data.armatures.remove(oldData)
 
+    elif type == "MESH":
+        if name in bpy.data.meshes:
+            oldData = bpy.data.meshes[name]
+            if oldData.users == 0:
+                bpy.data.meshes.remove(oldData)
+
 
 def CleanJoinSelect():
-    view_layer = bpy.context.view_layer
     if len(bpy.context.selected_objects) > 1:
+        view_layer = bpy.context.view_layer
         if view_layer.objects.active is None:
             view_layer.objects.active = bpy.context.selected_objects[0]
 
@@ -245,19 +245,18 @@ def GetAllCollisionAndSocketsObj(list=None):
     # Get any object that can be understood
     # as a collision or a socket by unreal
 
-    if list is not None:
-        objs = list
-    else:
-        objs = bpy.context.scene.objects
-
-    colObjs = [obj for obj in objs if (
-        fnmatch.fnmatchcase(obj.name, "UBX*") or
-        fnmatch.fnmatchcase(obj.name, "UCP*") or
-        fnmatch.fnmatchcase(obj.name, "USP*") or
-        fnmatch.fnmatchcase(obj.name, "UCX*") or
-        fnmatch.fnmatchcase(obj.name, "SOCKET*")
-        )]
-    return colObjs
+    objs = list if list is not None else bpy.context.scene.objects
+    return [
+        obj
+        for obj in objs
+        if (
+            fnmatch.fnmatchcase(obj.name, "UBX*")
+            or fnmatch.fnmatchcase(obj.name, "UCP*")
+            or fnmatch.fnmatchcase(obj.name, "USP*")
+            or fnmatch.fnmatchcase(obj.name, "UCX*")
+            or fnmatch.fnmatchcase(obj.name, "SOCKET*")
+        )
+    ]
 
 
 def GetExportDesiredChilds(obj):
@@ -273,12 +272,7 @@ def GetExportDesiredChilds(obj):
 
 
 def GetSocketDesiredChild(targetObj):
-    sockets = []
-    for obj in GetExportDesiredChilds(targetObj):
-        if IsASocket(obj):
-            sockets.append(obj)
-
-    return sockets
+    return [obj for obj in GetExportDesiredChilds(targetObj) if IsASocket(obj)]
 
 
 def GetSkeletalMeshSockets(obj):
@@ -286,16 +280,11 @@ def GetSkeletalMeshSockets(obj):
         return
 
     addon_prefs = GetAddonPrefs()
-    data = {}
-    sockets = []
-
-    for socket in GetSocketDesiredChild(obj):
-        sockets.append(socket)
-
+    sockets = list(GetSocketDesiredChild(obj))
     if GetAssetType(obj) != "SkeletalMesh":
         return
 
-    data['Sockets'] = []
+    data = {'Sockets': []}
     # config.set('Sockets', '; SocketName, BoneName, Location, Rotation, Scale')
 
     for i, socket in enumerate(sockets):
@@ -324,10 +313,11 @@ def GetSkeletalMeshSockets(obj):
         array_rotation = [math.degrees(r[0]), math.degrees(r[1])*-1, math.degrees(r[2])*-1]
         array_scale = [s[0], s[1], s[2]]
 
-        MySocket = {}
-        MySocket["SocketName"] = SocketName
-        MySocket["BoneName"] = b.name.replace('.', '_')
-        MySocket["Location"] = array_location
+        MySocket = {
+            "SocketName": SocketName,
+            "BoneName": b.name.replace('.', '_'),
+            "Location": array_location,
+        }
         MySocket["Rotation"] = array_rotation
         MySocket["Scale"] = array_scale
         data['Sockets'].append(MySocket)
@@ -336,12 +326,7 @@ def GetSkeletalMeshSockets(obj):
 
 
 def GetSubObjectDesiredChild(targetObj):
-    sub_objects = []
-    for obj in GetExportDesiredChilds(targetObj):
-        if IsASubObject(obj):
-            sub_objects.append(obj)
-
-    return sub_objects
+    return [obj for obj in GetExportDesiredChilds(targetObj) if IsASubObject(obj)]
 
 
 def RemoveAllConsraints(obj):
@@ -354,11 +339,9 @@ def RescaleRigConsraints(obj, scale):
     for b in obj.pose.bones:
         for c in b.constraints:
             # STRETCH_TO
-            if c.type == "STRETCH_TO":
-                c.rest_length *= scale  # Can be bigger than 10?... wtf
-
-            # LIMIT_LOCATION
-            if c.type == "LIMIT_LOCATION":
+            if c.type == "LIMIT_DISTANCE":
+                c.distance *= scale
+            elif c.type == "LIMIT_LOCATION":
                 c.min_x *= scale
                 c.min_y *= scale
                 c.min_z *= scale
@@ -366,9 +349,8 @@ def RescaleRigConsraints(obj, scale):
                 c.max_y *= scale
                 c.max_z *= scale
 
-            # LIMIT_DISTANCE
-            if c.type == "LIMIT_DISTANCE":
-                c.distance *= scale
+            elif c.type == "STRETCH_TO":
+                c.rest_length *= scale  # Can be bigger than 10?... wtf
 
 
 def RescaleShapeKeysCurve(obj, scale):
@@ -392,24 +374,24 @@ def RescaleShapeKeysCurve(obj, scale):
 
 
 def GetAllCollisionObj():
-    # Get any object that can be understood
-    # as a collision or a socket by unreal
-
-    colObjs = [obj for obj in bpy.context.scene.objects if (
-        fnmatch.fnmatchcase(obj.name, "UBX*") or
-        fnmatch.fnmatchcase(obj.name, "UCP*") or
-        fnmatch.fnmatchcase(obj.name, "USP*") or
-        fnmatch.fnmatchcase(obj.name, "UCX*"))]
-    return colObjs
+    return [
+        obj
+        for obj in bpy.context.scene.objects
+        if (
+            fnmatch.fnmatchcase(obj.name, "UBX*")
+            or fnmatch.fnmatchcase(obj.name, "UCP*")
+            or fnmatch.fnmatchcase(obj.name, "USP*")
+            or fnmatch.fnmatchcase(obj.name, "UCX*")
+        )
+    ]
 
 
 def GetCollectionToExport(scene):
     colExport = []
     for col in scene.CollectionExportList:
-        if col.use:
-            if col.name in bpy.data.collections:
-                collection = bpy.data.collections[col.name]
-                colExport.append(collection)
+        if col.name in bpy.data.collections:
+            if col.use:
+                colExport.append(bpy.data.collections[col.name])
     return colExport
 
 
@@ -450,9 +432,7 @@ class CachedAction():
     def StoreActions(self, obj, actions):
         # Update new cache
         self.name = obj.name
-        action_name_list = []
-        for action in actions:
-            action_name_list.append(action.name)
+        action_name_list = [action.name for action in actions]
         self.stored_actions = action_name_list
         self.total_actions.clear()
         for action in bpy.data.actions:
@@ -462,11 +442,11 @@ class CachedAction():
         # print("Stored action cache updated.")
 
     def GetStoredActions(self):
-        actions = []
-        for action_name in self.stored_actions:
-            if action_name in bpy.data.actions:
-                actions.append(bpy.data.actions[action_name])
-        return actions
+        return [
+            bpy.data.actions[action_name]
+            for action_name in self.stored_actions
+            if action_name in bpy.data.actions
+        ]
 
     def Clear(self):
         pass
@@ -529,10 +509,11 @@ def GetActionToExport(obj):
                         TargetActionToExport.append(action)
 
     elif obj.bfu_anim_action_export_enum == "export_specific_prefix":
-        for action in bpy.data.actions:
-            if fnmatch.fnmatchcase(action.name, obj.PrefixNameToExport+"*"):
-                TargetActionToExport.append(action)
-
+        TargetActionToExport.extend(
+            action
+            for action in bpy.data.actions
+            if fnmatch.fnmatchcase(action.name, f"{obj.PrefixNameToExport}*")
+        )
     elif obj.bfu_anim_action_export_enum == "export_auto":
         TargetActionToExport = GetCachedExportAutoActionList(obj)
 
@@ -552,21 +533,14 @@ def EvaluateCameraPositionForUnreal(camera, previous_euler=mathutils.Euler()):
 
     loc *= mathutils.Vector([1, -1, 1])
     array_rotation = [degrees(r[0]), degrees(r[1])*-1, degrees(r[2])*-1]  # Roll Pith Yaw XYZ
-    array_transform = [loc, array_rotation, s]
-
-    # array_location = [loc[0], loc[1]*-1, loc[2]]
-    # r = mathutils.Euler([degrees(r[0]), degrees(r[1])*-1, degrees(r[2])*-1], r.order)  # Roll Pith Yaw XYZ
-    # array_transform = [array_location, r, s]
-
-    return array_transform
+    return [loc, array_rotation, s]
 
 
 def EvaluateCameraRotationForBlender(transform):
     x = transform["rotation_x"]
     y = transform["rotation_y"]*-1
     z = transform["rotation_z"]*-1
-    euler = mathutils.Euler([x, y, z], "XYZ")
-    return euler
+    return mathutils.Euler([x, y, z], "XYZ")
 
 
 def GetDesiredActionStartEndTime(obj, action):
@@ -607,13 +581,13 @@ def GetDesiredActionStartEndTime(obj, action):
 
 
 def GetDesiredNLAStartEndTime(obj):
-    # Returns desired nla anim start/end time
-    # Return start with index 0 and end with index 1
-    # EndTime should be a less one frame bigger than StartTime
-
-    scene = bpy.context.scene
-
     if obj.bfu_anim_nla_start_end_time_enum == "with_sceneframes":
+        # Returns desired nla anim start/end time
+        # Return start with index 0 and end with index 1
+        # EndTime should be a less one frame bigger than StartTime
+
+        scene = bpy.context.scene
+
         startTime = scene.frame_start + obj.bfu_anim_nla_start_frame_offset
         endTime = scene.frame_end + obj.bfu_anim_nla_end_frame_offset
         if endTime <= startTime:
@@ -631,9 +605,7 @@ def GetDesiredNLAStartEndTime(obj):
 
 
 def GetUseCustomLightMapResolution(obj):
-    if obj.StaticMeshLightMapEnum == "Default":
-        return False
-    return True
+    return obj.StaticMeshLightMapEnum != "Default"
 
 
 def GetExportRealSurfaceArea(obj):
@@ -655,7 +627,7 @@ def GetExportRealSurfaceArea(obj):
     bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
     for selectObj in bpy.context.selected_objects:
         # Remove unable to convert mesh
-        if selectObj.type == "EMPTY" or selectObj.type == "CURVE":
+        if selectObj.type in ["EMPTY", "CURVE"]:
             CleanDeleteObjects([selectObj])
 
     for selectObj in bpy.context.selected_objects:
@@ -711,9 +683,7 @@ def GetCompuntedLightMap(obj):
 def GetActionType(action):
     # return action type
 
-    if action.frame_range.y - action.frame_range.x == 1:
-        return "Pose"
-    return "Action"
+    return "Pose" if action.frame_range.y - action.frame_range.x == 1 else "Action"
 
 
 def GetCollectionType(collection):
@@ -724,9 +694,7 @@ def GetCollectionType(collection):
 
 def GetIsAnimation(type):
     # return True if type(string) is a animation
-    if (type == "NlAnim" or type == "Action" or type == "Pose"):
-        return True
-    return False
+    return type in ["NlAnim", "Action", "Pose"]
 
 
 def GetAssetType(obj):
@@ -745,11 +713,7 @@ def GetAssetType(obj):
 
 
 def CheckIsCollision(target):
-    # Return true if obj is a collision
-    for obj in GetAllCollisionObj():
-        if obj == target:
-            return True
-    return False
+    return any(obj == target for obj in GetAllCollisionObj())
 
 
 def SelectCollectionObjects(collection):
@@ -762,7 +726,7 @@ def SelectCollectionObjects(collection):
                 selectObj.select_set(True)
                 selectedObjs.append(selectObj)
 
-    if len(selectedObjs) > 0:
+    if selectedObjs:
         if selectedObjs[0].name in bpy.context.view_layer.objects:
             bpy.context.view_layer.objects.active = selectedObjs[0]
 
@@ -784,9 +748,9 @@ def GetExportProxyChild(obj):
     if GetObjProxyChild(obj):
         return GetObjProxyChild(obj)
 
-    scene = bpy.context.scene
     if obj.data:
         if obj.data.library:
+            scene = bpy.context.scene
             for child_obj in scene.objects:
                 if child_obj != obj:
                     if child_obj.instance_collection:
@@ -829,12 +793,11 @@ def SelectParentAndDesiredChilds(obj):
 def RemoveSocketFromSelectForProxyArmature():
     select = bbpl.utils.UserSelectSave()
     select.SaveCurrentSelect()
-    # With skeletal mesh the socket must be not exported,
-    # ue4 read it like a bone
-    sockets = []
-    for obj in bpy.context.selected_objects:
-        if fnmatch.fnmatchcase(obj.name, "SOCKET*"):
-            sockets.append(obj)
+    sockets = [
+        obj
+        for obj in bpy.context.selected_objects
+        if fnmatch.fnmatchcase(obj.name, "SOCKET*")
+    ]
     CleanDeleteObjects(sockets)
     select.ResetSelectByName()
 
@@ -893,12 +856,11 @@ def CorrectExtremeUV(stepScale=2):
                         AddedFaces.append(f)
                         f.select = True
 
-        if len(AddedFaces) == 0:
+        if not AddedFaces:
             return AddedFaces
-        else:
-            for addedFace in SelectRecursiveUVLinked(uv_lay):
-                AddedFaces.append(addedFace)
-            return AddedFaces
+        for addedFace in SelectRecursiveUVLinked(uv_lay):
+            AddedFaces.append(addedFace)
+        return AddedFaces
 
     def GetAllIsland(bm, uv_lay):
         ToCheakFace = []
@@ -906,7 +868,7 @@ def CorrectExtremeUV(stepScale=2):
         for face in bm.faces:
             ToCheakFace.append(face)
 
-        while len(ToCheakFace) > 0:
+        while ToCheakFace:
             for face in bm.faces:
                 face.select = False
 
@@ -935,9 +897,7 @@ def CorrectExtremeUV(stepScale=2):
                 loop[uv_lay].uv[1] -= y
 
     def IsValidForUvEdit(obj):
-        if obj.type == "MESH":
-            return True
-        return False
+        return obj.type == "MESH"
 
     for obj in bpy.context.selected_objects:
         if IsValidForUvEdit(obj):
@@ -1010,18 +970,15 @@ def ApplySkeletalExportScale(armature, rescale, target_animation_data=None, is_a
     if target_animation_data is None:
         armature_animation_data = bbpl.anim_utils.AnimationManagment()
         armature_animation_data.SaveAnimationData(armature)
-        armature_animation_data.ClearAnimationData(armature)
     else:
         armature_animation_data = bbpl.anim_utils.AnimationManagment()
-        armature_animation_data.ClearAnimationData(armature)
-
+    armature_animation_data.ClearAnimationData(armature)
     armature.location = (0, 0, 0)
 
-    # Save childs location
-    ChildsLocation = []
-    for Child in GetChilds(armature):
-        ChildsLocation.append([Child, Child.location.copy(), Child.matrix_parent_inverse.copy()])
-
+    ChildsLocation = [
+        [Child, Child.location.copy(), Child.matrix_parent_inverse.copy()]
+        for Child in GetChilds(armature)
+    ]
     if is_a_proxy:
         selection = GetCurrentSelection()
         bpy.ops.object.select_all(action='DESELECT')
@@ -1039,12 +996,6 @@ def ApplySkeletalExportScale(armature, rescale, target_animation_data=None, is_a
 
     # Apply armature location
     armature.location = old_location*rescale
-
-    # Apply childs location
-    # I need work with matrix ChildLocation[0].matrix_parent_inverse
-    # But I don't understand how make it work.
-    for ChildLocation in ChildsLocation:
-        pass
 
     if target_animation_data is None:
         armature_animation_data.SetAnimationData(armature, True)
@@ -1168,7 +1119,7 @@ def GetFinalAssetToExport():
         for col in GetCollectionToExport(scene):
             collectionList.append(col.name)
 
-    elif export_filter == "only_object" or export_filter == "only_object_action":
+    elif export_filter in ["only_object", "only_object_action"]:
         recuList = GetAllobjectsByExportType("export_recursive")
 
         for obj in bpy.context.selected_objects:
@@ -1261,7 +1212,7 @@ def ValidUnrealAssetsName(filename):
     filename = filename.replace('(', '_')
     filename = filename.replace(')', '_')
     filename = filename.replace(' ', '_')
-    valid_chars = "-_%s%s" % (string.ascii_letters, string.digits)
+    valid_chars = f"-_{string.ascii_letters}{string.digits}"
     filename = ''.join(c for c in filename if c in valid_chars)
     return filename
 
@@ -1274,10 +1225,7 @@ def GetCollectionExportDir(col, abspath=False):
         scene.export_static_file_path,
         col.exportFolderName)
 
-    if abspath:
-        return bpy.path.abspath(dirpath)
-    else:
-        return dirpath
+    return bpy.path.abspath(dirpath) if abspath else dirpath
 
 
 def GetObjExportName(obj):
@@ -1314,11 +1262,7 @@ def GetObjExportDir(obj, abspath=False):
         dirpath = os.path.join(
             scene.export_camera_file_path,
             folder_name)
-    if abspath:
-        return bpy.path.abspath(dirpath)
-
-    else:
-        return dirpath
+    return bpy.path.abspath(dirpath) if abspath else dirpath
 
 
 def GetCollectionExportFileName(collection, fileType=".fbx"):
@@ -1351,15 +1295,15 @@ def GetActionExportFileName(obj, action, fileType=".fbx"):
     # Generate action file name
 
     scene = bpy.context.scene
-    if obj.bfu_anim_naming_type == "include_armature_name":
-        ArmatureName = obj.name+"_"
     if obj.bfu_anim_naming_type == "action_name":
         ArmatureName = ""
-    if obj.bfu_anim_naming_type == "include_custom_name":
-        ArmatureName = obj.bfu_anim_naming_custom+"_"
+    elif obj.bfu_anim_naming_type == "include_armature_name":
+        ArmatureName = f"{obj.name}_"
+    elif obj.bfu_anim_naming_type == "include_custom_name":
+        ArmatureName = f"{obj.bfu_anim_naming_custom}_"
 
     animType = GetActionType(action)
-    if animType == "NlAnim" or animType == "Action":
+    if animType in ["NlAnim", "Action"]:
         # Nla can be exported as action
         return ValidFilename(scene.anim_prefix_export_name+ArmatureName+action.name+fileType)
 
@@ -1374,12 +1318,12 @@ def GetNLAExportFileName(obj, fileType=".fbx"):
     # Generate action file name
 
     scene = bpy.context.scene
-    if obj.bfu_anim_naming_type == "include_armature_name":
-        ArmatureName = obj.name+"_"
     if obj.bfu_anim_naming_type == "action_name":
         ArmatureName = ""
-    if obj.bfu_anim_naming_type == "include_custom_name":
-        ArmatureName = obj.bfu_anim_naming_custom+"_"
+    elif obj.bfu_anim_naming_type == "include_armature_name":
+        ArmatureName = f"{obj.name}_"
+    elif obj.bfu_anim_naming_type == "include_custom_name":
+        ArmatureName = f"{obj.bfu_anim_naming_custom}_"
 
     return ValidFilename(scene.anim_prefix_export_name+ArmatureName+obj.bfu_anim_nla_export_name+fileType)
 
@@ -1390,7 +1334,7 @@ def GetImportAssetScriptCommand():
     absdirpath = bpy.path.abspath(scene.export_other_file_path)
     fullpath = os.path.join(absdirpath, fileName)
     addon_prefs = GetAddonPrefs()
-    return 'py "'+fullpath+'"'
+    return f'py "{fullpath}"'
 
 
 def GetImportCameraScriptCommand(objs, CineCamera=True):
@@ -1402,94 +1346,95 @@ def GetImportCameraScriptCommand(objs, CineCamera=True):
     add_camera_num = 0
 
     def AddCameraToCommand(camera):
-        if camera.type == "CAMERA":
-            t = ""
-            # Get Camera Data
-            scene = bpy.context.scene
-            frame_current = scene.frame_current
+        if camera.type != "CAMERA":
+            return None
 
-            # First I get the camera data.
-            # This is a very bad way to do this. I need do a new python file specific to camera with class to get data.
-            data = bfu_write_text.WriteCameraAnimationTracks(camera, frame_current, frame_current)
-            transform_track = data["Camera transform"][frame_current]
-            location_x = transform_track["location_x"]
-            location_y = transform_track["location_y"]
-            location_z = transform_track["location_z"]
-            rotation_x = transform_track["rotation_x"]
-            rotation_y = transform_track["rotation_y"]
-            rotation_z = transform_track["rotation_z"]
-            scale_x = transform_track["scale_x"]
-            scale_y = transform_track["scale_y"]
-            scale_z = transform_track["scale_z"]
-            NearClippingPlane = data["Camera NearClippingPlane"][frame_current]
-            FarClippingPlane = data["Camera FarClippingPlane"][frame_current]
-            FieldOfView = data["Camera FieldOfView"][frame_current]
-            FocalLength = data["Camera FocalLength"][frame_current]
-            SensorWidth = data["Camera SensorWidth"][frame_current]
-            SensorHeight = data["Camera SensorHeight"][frame_current]
-            FocusDistance = data["Camera FocusDistance"][frame_current]
-            Aperture = data["Camera Aperture"][frame_current]
-            AspectRatio = data["desired_screen_ratio"]
-            CameraName = camera.name
+        t = ""
+        # Get Camera Data
+        scene = bpy.context.scene
+        frame_current = scene.frame_current
 
-            # Actor
-            if CineCamera:
-                t += "      " + "Begin Actor Class=/Script/CinematicCamera.CineCameraActor Name="+CameraName+" Archetype=/Script/CinematicCamera.CineCameraActor'/Script/CinematicCamera.Default__CineCameraActor'" + "\n"
-            else:
-                t += "      " + "Begin Actor Class=/Script/Engine.CameraActor Name="+CameraName+" Archetype=/Script/Engine.CameraActor'/Script/Engine.Default__CameraActor'" + "\n"
+        # First I get the camera data.
+        # This is a very bad way to do this. I need do a new python file specific to camera with class to get data.
+        data = bfu_write_text.WriteCameraAnimationTracks(camera, frame_current, frame_current)
+        transform_track = data["Camera transform"][frame_current]
+        location_x = transform_track["location_x"]
+        location_y = transform_track["location_y"]
+        location_z = transform_track["location_z"]
+        rotation_x = transform_track["rotation_x"]
+        rotation_y = transform_track["rotation_y"]
+        rotation_z = transform_track["rotation_z"]
+        scale_x = transform_track["scale_x"]
+        scale_y = transform_track["scale_y"]
+        scale_z = transform_track["scale_z"]
+        NearClippingPlane = data["Camera NearClippingPlane"][frame_current]
+        FarClippingPlane = data["Camera FarClippingPlane"][frame_current]
+        FieldOfView = data["Camera FieldOfView"][frame_current]
+        FocalLength = data["Camera FocalLength"][frame_current]
+        SensorWidth = data["Camera SensorWidth"][frame_current]
+        SensorHeight = data["Camera SensorHeight"][frame_current]
+        FocusDistance = data["Camera FocusDistance"][frame_current]
+        Aperture = data["Camera Aperture"][frame_current]
+        AspectRatio = data["desired_screen_ratio"]
+        CameraName = camera.name
 
-            # Init SceneComponent
-            if CineCamera:
-                t += "         " + "Begin Object Class=/Script/Engine.SceneComponent Name=\"SceneComponent\" Archetype=/Script/Engine.SceneComponent'/Script/CinematicCamera.Default__CineCameraActor:SceneComponent'" + "\n"
-                t += "         " + "End Object" + "\n"
-            else:
-                t += "         " + "Begin Object Class=/Script/Engine.SceneComponent Name=\"SceneComponent\" Archetype=/Script/Engine.SceneComponent'/Script/Engine.Default__CameraActor:SceneComponent'" + "\n"
-                t += "         " + "End Object" + "\n"
+        # Actor
+        if CineCamera:
+            t += "      " + "Begin Actor Class=/Script/CinematicCamera.CineCameraActor Name="+CameraName+" Archetype=/Script/CinematicCamera.CineCameraActor'/Script/CinematicCamera.Default__CineCameraActor'" + "\n"
+        else:
+            t += "      " + "Begin Actor Class=/Script/Engine.CameraActor Name="+CameraName+" Archetype=/Script/Engine.CameraActor'/Script/Engine.Default__CameraActor'" + "\n"
 
-            # Init CameraComponent
-            if CineCamera:
-                t += "         " + "Begin Object Class=/Script/CinematicCamera.CineCameraComponent Name=\"CameraComponent\" Archetype=/Script/CinematicCamera.CineCameraComponent'/Script/CinematicCamera.Default__CineCameraActor:CameraComponent'" + "\n"
-                t += "         " + "End Object" + "\n"
-            else:
-                t += "         " + "Begin Object Class=/Script/Engine.CameraComponent Name=\"CameraComponent\" Archetype=/Script/Engine.CameraComponent'/Script/Engine.Default__CameraActor:CameraComponent'" + "\n"
-                t += "         " + "End Object" + "\n"
-
-            # SceneComponent
-            t += "         " + "Begin Object Name=\"SceneComponent\"" + "\n"
-            t += "            " + "RelativeLocation=(X="+str(location_x)+",Y="+str(location_y)+",Z="+str(location_z)+")" + "\n"
-            t += "            " + "RelativeRotation=(Pitch="+str(rotation_y)+",Yaw="+str(rotation_z)+",Roll="+str(rotation_x)+")" + "\n"
-            t += "            " + "RelativeScale3D=(X="+str(scale_x)+",Y="+str(scale_y)+",Z="+str(scale_z)+")" + "\n"
+        # Init SceneComponent
+        if CineCamera:
+            t += "         " + "Begin Object Class=/Script/Engine.SceneComponent Name=\"SceneComponent\" Archetype=/Script/Engine.SceneComponent'/Script/CinematicCamera.Default__CineCameraActor:SceneComponent'" + "\n"
+            t += "         " + "End Object" + "\n"
+        else:
+            t += "         " + "Begin Object Class=/Script/Engine.SceneComponent Name=\"SceneComponent\" Archetype=/Script/Engine.SceneComponent'/Script/Engine.Default__CameraActor:SceneComponent'" + "\n"
             t += "         " + "End Object" + "\n"
 
-            # CameraComponent
-            t += "         " + "Begin Object Name=\"CameraComponent\"" + "\n"
-            t += "            " + "Filmback=(SensorWidth="+str(SensorWidth)+",SensorHeight="+str(SensorHeight)+", SensorAspectRatio="+str(AspectRatio)+")" + "\n"
-            t += "            " + "CurrentAperture="+str(Aperture)+")" + "\n"
-            t += "            " + "CurrentFocalLength="+str(FocalLength)+")" + "\n"
-            t += "            " + "CurrentFocusDistance="+str(FocusDistance)+")" + "\n"
-            t += "            " + "CurrentFocusDistance="+str(FocusDistance)+")" + "\n"
-            t += "            " + "CustomNearClippingPlane="+str(NearClippingPlane)+")" + "\n"
-            t += "            " + "FieldOfView="+str(FieldOfView)+")" + "\n"
-            t += "            " + "AspectRatio="+str(AspectRatio)+")" + "\n"
+        # Init CameraComponent
+        if CineCamera:
+            t += "         " + "Begin Object Class=/Script/CinematicCamera.CineCameraComponent Name=\"CameraComponent\" Archetype=/Script/CinematicCamera.CineCameraComponent'/Script/CinematicCamera.Default__CineCameraActor:CameraComponent'" + "\n"
+            t += "         " + "End Object" + "\n"
+        else:
+            t += "         " + "Begin Object Class=/Script/Engine.CameraComponent Name=\"CameraComponent\" Archetype=/Script/Engine.CameraComponent'/Script/Engine.Default__CameraActor:CameraComponent'" + "\n"
             t += "         " + "End Object" + "\n"
 
-            # Attach
-            t += "         " + "CameraComponent=\"CameraComponent\"" + "\n"
-            t += "         " + "SceneComponent=\"SceneComponent\"" + "\n"
-            t += "         " + "RootComponent=\"SceneComponent\"" + "\n"
-            t += "         " + "ActorLabel=\""+CameraName+"\"" + "\n"
+        # SceneComponent
+        t += "         " + "Begin Object Name=\"SceneComponent\"" + "\n"
+        t += "            " + "RelativeLocation=(X="+str(location_x)+",Y="+str(location_y)+",Z="+str(location_z)+")" + "\n"
+        t += "            " + "RelativeRotation=(Pitch="+str(rotation_y)+",Yaw="+str(rotation_z)+",Roll="+str(rotation_x)+")" + "\n"
+        t += "            " + "RelativeScale3D=(X="+str(scale_x)+",Y="+str(scale_y)+",Z="+str(scale_z)+")" + "\n"
+        t += "         " + "End Object" + "\n"
 
-            # Close
-            t += "      " + "End Actor" + "\n"
-            return t
-        return None
+        # CameraComponent
+        t += "         " + "Begin Object Name=\"CameraComponent\"" + "\n"
+        t += "            " + "Filmback=(SensorWidth="+str(SensorWidth)+",SensorHeight="+str(SensorHeight)+", SensorAspectRatio="+str(AspectRatio)+")" + "\n"
+        t += "            " + "CurrentAperture="+str(Aperture)+")" + "\n"
+        t += "            " + "CurrentFocalLength="+str(FocalLength)+")" + "\n"
+        t += "            " + "CurrentFocusDistance="+str(FocusDistance)+")" + "\n"
+        t += "            " + "CurrentFocusDistance="+str(FocusDistance)+")" + "\n"
+        t += "            " + "CustomNearClippingPlane="+str(NearClippingPlane)+")" + "\n"
+        t += "            " + "FieldOfView="+str(FieldOfView)+")" + "\n"
+        t += "            " + "AspectRatio="+str(AspectRatio)+")" + "\n"
+        t += "         " + "End Object" + "\n"
+
+        # Attach
+        t += "         " + "CameraComponent=\"CameraComponent\"" + "\n"
+        t += "         " + "SceneComponent=\"SceneComponent\"" + "\n"
+        t += "         " + "RootComponent=\"SceneComponent\"" + "\n"
+        t += "         " + "ActorLabel=\""+CameraName+"\"" + "\n"
+
+        # Close
+        t += "      " + "End Actor" + "\n"
+        return t
 
     cameras = []
     for obj in objs:
         if obj.type == "CAMERA":
             cameras.append(obj)
 
-    if len(cameras) == 0:
+    if not cameras:
         report = "Please select at least one camera."
         return (success, command, report)
 
@@ -1510,9 +1455,9 @@ def GetImportCameraScriptCommand(objs, CineCamera=True):
     success = True
     command = t
     if CineCamera:
-        report = str(add_camera_num)+" Cine camera(s) copied. Paste in Unreal Engine scene for import the camera. (Ctrl+V)"
+        report = f"{str(add_camera_num)} Cine camera(s) copied. Paste in Unreal Engine scene for import the camera. (Ctrl+V)"
     else:
-        report = str(add_camera_num)+" Regular camera(s) copied. Paste in Unreal Engine scene for import the camera. (Ctrl+V)"
+        report = f"{str(add_camera_num)} Regular camera(s) copied. Paste in Unreal Engine scene for import the camera. (Ctrl+V)"
 
     return (success, command, report)
 
@@ -1523,7 +1468,7 @@ def GetImportSkeletalMeshSocketScriptCommand(obj):
         if obj.type == "ARMATURE":
             sockets = GetSkeletalMeshSockets(obj)
             t = "SocketCopyPasteBuffer" + "\n"
-            t += "NumSockets=" + str(len(sockets)) + "\n"
+            t += f"NumSockets={len(sockets)}" + "\n"
             t += "IsOnSkeleton=1" + "\n"
             for socket in sockets:
                 t += "Begin Object Class=/Script/Engine.SkeletalMeshSocket" + "\n"
@@ -1547,7 +1492,7 @@ def GetImportSequencerScriptCommand():
     fullpath = os.path.join(absdirpath, fileName)
 
     addon_prefs = GetAddonPrefs()
-    return 'py "'+fullpath+'"'  # Vania
+    return f'py "{fullpath}"'
 
 
 def GetAnimSample(obj):
@@ -1560,10 +1505,7 @@ def GetArmatureRootBones(obj):
     if GetAssetType(obj) == "SkeletalMesh":
 
         if not obj.exportDeformOnly:
-            for bone in obj.data.bones:
-                if bone.parent is None:
-                    rootBones.append(bone)
-
+            rootBones.extend(bone for bone in obj.data.bones if bone.parent is None)
         if obj.exportDeformOnly:
             for bone in obj.data.bones:
                 if bone.use_deform:
@@ -1608,11 +1550,10 @@ def GenerateUe4Name(name):
     newName = ""
     if IsValidName(name):
         return name
-    else:
-        for num in range(0, 1000):
-            newName = name+"_"+str('%02d' % num)  # Min two pad
-            if IsValidName(newName):
-                return newName
+    for num in range(0, 1000):
+        newName = f"{name}_" + str('%02d' % num)
+        if IsValidName(newName):
+            return newName
 
     return name
 
@@ -1702,7 +1643,7 @@ def Ue4SubObj_set(SubType):
             if obj.type == 'EMPTY' and SubType == "ST_Socket":
                 if ownerObj.type == 'MESH':
                     if not IsASocket(obj):
-                        obj.name = GenerateUe4Name("SOCKET_"+obj.name)
+                        obj.name = GenerateUe4Name(f"SOCKET_{obj.name}")
                     bpy.ops.object.parent_set(
                         type='OBJECT',
                         keep_transform=True)
@@ -1713,7 +1654,7 @@ def Ue4SubObj_set(SubType):
                 if ownerObj.type == 'ARMATURE':
 
                     if not IsASocket(obj):
-                        obj.name = GenerateUe4Name("SOCKET_"+obj.name)
+                        obj.name = GenerateUe4Name(f"SOCKET_{obj.name}")
                     bpy.ops.object.parent_set(type='BONE')
                     ConvertedObjs.append(obj)
 
@@ -1743,24 +1684,22 @@ def UpdateUe4Name(SubType, objList):
                         prefixName = "UBX_"
                     elif SubType == "Capsule":
                         prefixName = "UCP_"
-                    elif SubType == "Sphere":
-                        prefixName = "USP_"
                     elif SubType == "Convex":
                         prefixName = "UCX_"
 
+                    elif SubType == "Sphere":
+                        prefixName = "USP_"
                     obj.name = GenerateUe4Name(prefixName+ownerObj.name)
 
-                # StaticMesh Socket
-                if obj.type == 'EMPTY' and SubType == "ST_Socket":
-                    if ownerObj.type == 'MESH':
+                if ownerObj.type == 'ARMATURE':
+                    if obj.type == 'EMPTY' and SubType == "SK_Socket":
                         if not IsASocket(obj):
-                            obj.name = GenerateUe4Name("SOCKET_"+obj.name)
+                            obj.name = GenerateUe4Name(f"SOCKET_{obj.name}")
 
-                # SkeletalMesh Socket
-                if obj.type == 'EMPTY' and SubType == "SK_Socket":
-                    if ownerObj.type == 'ARMATURE':
+                elif ownerObj.type == 'MESH':
+                    if obj.type == 'EMPTY' and SubType == "ST_Socket":
                         if not IsASocket(obj):
-                            obj.name = GenerateUe4Name("SOCKET_"+obj.name)
+                            obj.name = GenerateUe4Name(f"SOCKET_{obj.name}")
 
 
 def IsASocket(obj):
@@ -1799,9 +1738,7 @@ def IsASubObject(obj):
     '''
     Retrun True is object is an Socket or and Collision.
     '''
-    if IsASocket(obj) or IsACollision(obj):
-        return True
-    return False
+    return bool(IsASocket(obj) or IsACollision(obj))
 
 
 def UpdateAreaLightMapList(list=None):
@@ -1810,12 +1747,12 @@ def UpdateAreaLightMapList(list=None):
     if list is not None:
         objs = list
     else:
-        objs = []
         exportObjs = GetAllobjectsByExportType("export_recursive")
-        for exportObj in exportObjs:
-            if GetAssetType(exportObj) == "StaticMesh":
-                objs.append(exportObj)
-
+        objs = [
+            exportObj
+            for exportObj in exportObjs
+            if GetAssetType(exportObj) == "StaticMesh"
+        ]
     UpdatedRes = 0
 
     counter = CounterTimer()
@@ -1831,12 +1768,8 @@ def UpdateAreaLightMapList(list=None):
 
 def AddFrontEachLine(ImportScript, text="\t"):
 
-    NewImportScript = ""
     text_splited = ImportScript.split('\n')
-    for line in text_splited:
-        NewImportScript += text + line + "\n"
-
-    return NewImportScript
+    return "".join(text + line + "\n" for line in text_splited)
 
 
 # Custom property

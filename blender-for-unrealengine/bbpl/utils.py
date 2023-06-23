@@ -93,9 +93,7 @@ class UserSelectSave():
             self.user_active_name = self.user_active.name
 
         self.user_selecteds = c.selected_objects  # Save current selected objects
-        self.user_selected_names = []
-        for obj in c.selected_objects:
-            self.user_selected_names.append(obj.name)
+        self.user_selected_names = [obj.name for obj in c.selected_objects]
 
     def ResetSelectByRef(self):
         self.SaveMode()
@@ -205,20 +203,21 @@ class UserSceneSave():
 
     def ResetBonesSelectByName(self):
         # Work only in pose mode!
-        if len(self.object_bones) > 0:
-            if self.user_select_class.user_active:
-                if bpy.ops.object.mode_set.poll():
-                    if self.user_select_class.user_active.mode == "POSE":
-                        bpy.ops.pose.select_all(action='DESELECT')
-                        for bone in self.object_bones:
-                            if bone.select:
-                                if bone.name in self.user_select_class.user_active.data.bones:
-                                    self.user_select_class.user_active.data.bones[bone.name].select = True
+        if len(self.object_bones) <= 0:
+            return
+        if self.user_select_class.user_active:
+            if bpy.ops.object.mode_set.poll():
+                if self.user_select_class.user_active.mode == "POSE":
+                    bpy.ops.pose.select_all(action='DESELECT')
+                    for bone in self.object_bones:
+                        if bone.select:
+                            if bone.name in self.user_select_class.user_active.data.bones:
+                                self.user_select_class.user_active.data.bones[bone.name].select = True
 
-                        if self.user_bone_active_name is not None:
-                            if self.user_bone_active_name in self.user_select_class.user_active.data.bones:
-                                new_active = self.user_select_class.user_active.data.bones[self.user_bone_active_name]
-                                self.user_select_class.user_active.data.bones.active = new_active
+                    if self.user_bone_active_name is not None:
+                        if self.user_bone_active_name in self.user_select_class.user_active.data.bones:
+                            new_active = self.user_select_class.user_active.data.bones[self.user_bone_active_name]
+                            self.user_select_class.user_active.data.bones.active = new_active
 
     def ResetModeAtSave(self):
         if self.user_mode:
@@ -323,12 +322,7 @@ def modeSetOnTarget(target_object=None, target_mode='OBJECT'):
 
 def SafeModeSet(target_mode='OBJECT', obj=None):
     if bpy.ops.object.mode_set.poll():
-        if obj:
-            if obj.mode != target_mode:
-                bpy.ops.object.mode_set(mode=target_mode)
-                return True
-
-        else:
+        if obj and obj.mode != target_mode or not obj:
             bpy.ops.object.mode_set(mode=target_mode)
             return True
 
@@ -354,11 +348,7 @@ def jsonList(string):
         return []
 
     jdata = json.loads(string)
-    List = []
-    for d in jdata:
-        # for value in d.iteritems():
-        List.append(d)
-    return List
+    return list(jdata)
 
 
 def clearDriverVar(d):
@@ -374,9 +364,9 @@ def GetControlerToSwitch(Bones):
     # Fk and Ik copntroler
     controlerList = []
     for bone in Bones:
-        for item in list(bone.items()):
-            if item[0] == "IkBlend":
-                controlerList.append(bone)
+        controlerList.extend(
+            bone for item in list(bone.items()) if item[0] == "IkBlend"
+        )
     return controlerList
 
 
@@ -400,14 +390,16 @@ def GetVisualBonesPosPacked(obj, TargetBones):
 
 def ApplyRealMatrixWorldBones(bone, obj, matrix):
     for cons in bone.constraints:
-        if cons.type == "CHILD_OF":
-            if not cons.mute:
+        if not cons.mute:
+            if cons.type == "CHILD_OF":
                 if cons.target is not None:
                     Child = cons.inverse_matrix
-                    if cons.target.type == "ARMATURE":
-                        par = obj.matrix_world @ obj.pose.bones[cons.subtarget].matrix
-                    else:
-                        par = cons.target.matrix_world
+                    par = (
+                        obj.matrix_world
+                        @ obj.pose.bones[cons.subtarget].matrix
+                        if cons.target.type == "ARMATURE"
+                        else cons.target.matrix_world
+                    )
                     bone.matrix = obj.matrix_world.inverted() @ (Child.inverted() @ par.inverted() @ matrix)
                     return
     bone.matrix = obj.matrix_world.inverted() @ matrix
@@ -437,10 +429,9 @@ def SetVisualBonePos(obj, Bone, loc, rot, scale, UseLoc, UseRot, UseScale):
 
 
 def FindItemInListByName(item, list):
-    for TargetItem in list:
-        if TargetItem.name == item:
-            return TargetItem
-    return None
+    return next(
+        (TargetItem for TargetItem in list if TargetItem.name == item), None
+    )
 
 
 def SetVisualBonesPosPacked(obj, TargetBones, PositionList, UseLoc, UseRot, UseScale):
@@ -493,12 +484,11 @@ def GetControledBonesBySwitch(armature, controlerBone):
 
 
 def getSafeCollection(collection_name):
-    # Found or create collection.
-    if collection_name in bpy.data.collections:
-        myCol = bpy.data.collections[collection_name]
-    else:
-        myCol = bpy.data.collections.new(collection_name)
-    return myCol
+    return (
+        bpy.data.collections[collection_name]
+        if collection_name in bpy.data.collections
+        else bpy.data.collections.new(collection_name)
+    )
 
 
 def getRecursiveLayerCollection(layer_collection):
@@ -525,22 +515,22 @@ def getRigCollection(armature, col_type="RIG"):
     if col_type == "RIG":
         return rig_col
     elif col_type == "SHAPE":
-        shape_Col = getSafeCollection(armature.name+"_RigShapes")
+        shape_Col = getSafeCollection(f"{armature.name}_RigShapes")
         if shape_Col.name not in rig_col.children:
             rig_col.children.link(shape_Col)
         return shape_Col
     elif col_type == "CURVE":
-        shape_Col = getSafeCollection(armature.name+"_RigCurves")
+        shape_Col = getSafeCollection(f"{armature.name}_RigCurves")
         if shape_Col.name not in rig_col.children:
             rig_col.children.link(shape_Col)
         return shape_Col
     elif col_type == "CAMERA":
-        shape_Col = getSafeCollection(armature.name+"_RigCameras")
+        shape_Col = getSafeCollection(f"{armature.name}_RigCameras")
         if shape_Col.name not in rig_col.children:
             rig_col.children.link(shape_Col)
         return shape_Col
     else:
-        print("In getRigCollection() "+col_type+" not found!")
+        print(f"In getRigCollection() {col_type} not found!")
 
 
 def getVertexColors(obj):
@@ -553,10 +543,9 @@ def getVertexColors(obj):
 def getVertexColors_RenderColorIndex(obj):
     if bpy.app.version >= (3, 2, 0):
         return obj.data.color_attributes.render_color_index
-    else:
-        for index, vertex_color in enumerate(obj.data.vertex_colors):
-            if vertex_color.active_render:
-                return index
+    for index, vertex_color in enumerate(obj.data.vertex_colors):
+        if vertex_color.active_render:
+            return index
 
 
 def getVertexColor_ActiveColorIndex(obj):
@@ -567,8 +556,7 @@ def getVertexColor_ActiveColorIndex(obj):
 
 
 def getLayerCollectionsRecursive(layer_collection):
-    layer_collections = []
-    layer_collections.append(layer_collection)  # Add curent
+    layer_collections = [layer_collection]
     for child_col in layer_collection.children:
         layer_collections.extend(getLayerCollectionsRecursive(child_col))  # Add childs recursive
 

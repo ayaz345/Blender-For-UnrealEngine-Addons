@@ -65,8 +65,8 @@ def ProcessStaticMeshExport(obj):
     file.path = dirpath
     file.type = "FBX"
 
-    if not obj.ExportAsLod:
-        if (scene.text_AdditionalData and addon_prefs.useGeneratedScripts):
+    if (scene.text_AdditionalData and addon_prefs.useGeneratedScripts):
+        if not obj.ExportAsLod:
             ExportAdditionalParameter(absdirpath, MyAsset)
             file = MyAsset.files.add()
             file.name = GetObjExportFileName(obj, "_AdditionalTrack.json")

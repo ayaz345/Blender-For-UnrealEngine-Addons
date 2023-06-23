@@ -160,7 +160,23 @@ def ExportSingleFbxAction(
 
     asset_name.SetExportName()
 
-    if (export_procedure == "normal"):
+    if export_procedure == "auto-rig-pro":
+        OriginalActionName = active.animation_data.action.name
+        active.animation_data.action.name = "ActionAutoRigProTempExportNameForUnreal"
+
+        ExportAutoProRig(
+            filepath=GetExportFullpath(dirpath, filename),
+            # export_rig_name=GetDesiredExportArmatureName(active),
+            bake_anim=True,
+            anim_export_name_string=active.animation_data.action.name,
+            mesh_smooth_type="FACE",
+            arp_simplify_fac=active.SimplifyAnimForExport
+            )
+
+        # Reset Action name
+        active.animation_data.action.name = OriginalActionName
+
+    elif export_procedure == "normal":
         bpy.ops.export_scene.fbx(
             filepath=GetExportFullpath(dirpath, filename),
             check_existing=False,
@@ -184,25 +200,6 @@ def ExportSingleFbxAction(
             axis_up=active.exportAxisUp,
             bake_space_transform=False
             )
-
-    elif (export_procedure == "auto-rig-pro"):
-
-        # Rename Action name for export
-        TempName = "ActionAutoRigProTempExportNameForUnreal"
-        OriginalActionName = active.animation_data.action.name
-        active.animation_data.action.name = TempName
-
-        ExportAutoProRig(
-            filepath=GetExportFullpath(dirpath, filename),
-            # export_rig_name=GetDesiredExportArmatureName(active),
-            bake_anim=True,
-            anim_export_name_string=active.animation_data.action.name,
-            mesh_smooth_type="FACE",
-            arp_simplify_fac=active.SimplifyAnimForExport
-            )
-
-        # Reset Action name
-        active.animation_data.action.name = OriginalActionName
 
     asset_name.ResetNames()
 
